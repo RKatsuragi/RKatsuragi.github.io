@@ -27,10 +27,6 @@
 
 <main>
   <h2>Publications / Achievements</h2>
-  <div class="toolbar">
-    <button type="button" id="expand-all">すべて開く</button>
-    <button type="button" id="collapse-all">すべて閉じる</button>
-  </div>
   <div id="achievements"><p class="status">業績を読み込み中…</p></div>
 </main>
 
@@ -177,13 +173,6 @@
       console.error(e);
     }
   }
-
-  // すべて開く / 閉じる
-  function setAll(open) {
-    document.querySelectorAll("details.pub-section").forEach((d) => { d.open = open; });
-  }
-  document.getElementById("expand-all").addEventListener("click", () => setAll(true));
-  document.getElementById("collapse-all").addEventListener("click", () => setAll(false));
 
   loadAchievements();
 </script>
