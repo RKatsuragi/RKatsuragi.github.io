@@ -103,19 +103,6 @@ ul.timeline .when { color: var(--muted); }
 }
 
 /* ---------- Publications page ---------- */
-.toolbar { display: flex; gap: 8px; margin: 8px 0 16px; }
-.toolbar button {
-  font: inherit;
-  font-size: 0.9rem;
-  padding: 4px 12px;
-  color: var(--fg);
-  background: var(--bg-sub);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  cursor: pointer;
-}
-.toolbar button:hover { border-color: var(--accent); }
-
 details.pub-section {
   border: 1px solid var(--border);
   border-radius: 8px;
