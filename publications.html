@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Publications | Reiya Katsuragi</title>
+  <link rel="stylesheet" href="css/style.css">
+  <!-- SheetJS: ブラウザ上で .xlsx / .xlsm を解析するライブラリ -->
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+</head>
+<body>
+
+<header>
+  <div class="header-inner">
+    <img class="profile-photo" src="images/profile.jpg" alt="Reiya Katsuragi">
+    <div>
+      <p class="name-ja">葛城 玲弥</p>
+      <p class="name-en">Reiya Katsuragi</p>
+      <p class="affiliation"><!-- 所属をここに記載 --></p>
+    </div>
+  </div>
+  <nav>
+    <a href="index.html">About</a>
+    <a href="publications.html" class="active">Publications</a>
+  </nav>
+</header>
+
+<main>
+  <h2>Publications / Achievements</h2>
+  <div class="toolbar">
+    <button type="button" id="expand-all">すべて開く</button>
+    <button type="button" id="collapse-all">すべて閉じる</button>
+  </div>
+  <div id="achievements"><p class="status">業績を読み込み中…</p></div>
+</main>
+
+<footer>&copy; Reiya Katsuragi</footer>
+
+<script>
+  // ================= 設定 =================
+  // 業績ファイルのパス（このHTMLからの相対パス）。.xlsx / .xlsm どちらでも可
+  const ACHIEVEMENT_FILE = "data/Ref_Rkatsuragi.xlsx";
+
+  // 著者リスト中で強調表示する自分の名前の表記ゆれ
+  const MY_NAMES = ["葛城玲弥", "葛城 玲弥", "Reiya Katsuragi", "R. Katsuragi"];
+
+  // 表示するシート・順序・見出し・初期状態（open: true で最初から開いた状態）
+  // シート名はExcel側と完全一致させる
+  const SECTIONS = [
+    { sheet: "Journal",                  label: "Journal Papers（論文誌）",                  open: true  },
+    { sheet: "International Conference", label: "International Conferences（国際会議）",     open: true  },
+    { sheet: "National Conference",      label: "Domestic Conferences（国内発表）",           open: false },
+    { sheet: "Preprint",                 label: "Preprints",                                  open: false },
+    { sheet: "Technical Report",         label: "Technical Reports / Articles（解説記事等）", open: false },
+    { sheet: "Award",                    label: "Awards（受賞）",                             open: true  },
+    { sheet: "Funding",                  label: "Funding（研究費・プログラム）",              open: false },
+  ];
+  // ========================================
+
+  const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+  const val = (row, key) => String(row[key] ?? "").trim();
+
+  // 自分の名前を強調（エスケープ後に適用）
+  function highlightMe(authorsEscaped) {
+    let out = authorsEscaped;
+    for (const n of MY_NAMES) {
+      const e = esc(n);
+      out = out.split(e).join(`<span class="me">${e}</span>`);
+    }
+    return out;
+  }
+
+  function dateStr(row) {
+    const y = val(row, "Year"), m = val(row, "Month");
+    return y ? (m ? `${y}.${m.padStart(2, "0")}` : y) : "";
+  }
+
+  function link(url) {
+    return url ? ` [<a href="${esc(url)}" target="_blank" rel="noopener">Link</a>]` : "";
+  }
+
+  // シートごとの1件分の書式
+  const FORMATTERS = {
+    paper(row) {  // Journal / International / National Conference
+      const parts = [
+        highlightMe(esc(val(row, "Authors"))),
+        `<span class="pub-title">${esc(val(row, "Title"))}</span>`,
+        `<span class="pub-venue">${esc(val(row, "Conference Name"))}</span>`,
+      ];
+      if (val(row, "Session")) parts.push(esc(val(row, "Session")));
+      if (dateStr(row)) parts.push(dateStr(row));
+      return parts.join(", ") + "." + link(val(row, "URL"));
+    },
+    preprint(row) {
+      return [
+        highlightMe(esc(val(row, "Authors"))),
+        `<span class="pub-title">${esc(val(row, "Title"))}</span>`,
+        `<span class="pub-venue">${esc(val(row, "Repository"))}</span>`,
+        dateStr(row),
+      ].filter(Boolean).join(", ") + "." + link(val(row, "URL"));
+    },
+    report(row) {
+      const vol = val(row, "Vol."), no = val(row, "No."), pages = val(row, "Pages");
+      let venue = `<span class="pub-venue">${esc(val(row, "Journal"))}</span>`;
+      if (vol) venue += `, Vol.${esc(vol)}`;
+      if (no) venue += `, No.${esc(no)}`;
+      if (pages) venue += `, pp.${esc(pages)}`;
+      return [
+        highlightMe(esc(val(row, "Authors"))),
+        `<span class="pub-title">${esc(val(row, "Title"))}</span>`,
+        venue,
+        dateStr(row),
+      ].filter(Boolean).join(", ") + ".";
+    },
+    award(row) {
+      const work = val(row, "Title / Work");
+      const parts = [
+        `<span class="pub-title">${esc(val(row, "Award"))}</span>`,
+        `<span class="pub-venue">${esc(val(row, "Event"))}</span>`,
+      ];
+      if (work && work !== "—") parts.push(`「${esc(work)}」`);
+      if (val(row, "Recipients")) parts.push(highlightMe(esc(val(row, "Recipients"))));
+      if (dateStr(row)) parts.push(dateStr(row));
+      return parts.join(", ") + "." + link(val(row, "URL"));
+    },
+    funding(row) {
+      return `<span class="pub-title">${esc(val(row, "Program"))}</span>` +
+             (val(row, "Period") ? `（${esc(val(row, "Period"))}）` : "");
+    },
+  };
+
+  function pickFormatter(sheet) {
+    if (sheet === "Preprint") return FORMATTERS.preprint;
+    if (sheet === "Technical Report") return FORMATTERS.report;
+    if (sheet === "Award") return FORMATTERS.award;
+    if (sheet === "Funding") return FORMATTERS.funding;
+    return FORMATTERS.paper;
+  }
+
+  // 新しい順（Year→Month→No の降順）
+  function sortDesc(rows) {
+    const n = (x) => Number(x) || 0;
+    return rows.sort((a, b) =>
+      n(b.Year) - n(a.Year) || n(b.Month) - n(a.Month) || n(b.No) - n(a.No));
+  }
+
+  async function loadAchievements() {
+    const container = document.getElementById("achievements");
+    try {
+      const res = await fetch(ACHIEVEMENT_FILE, { cache: "no-cache" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}: ${ACHIEVEMENT_FILE}`);
+      const wb = XLSX.read(await res.arrayBuffer(), { type: "array" });
+
+      let html = "";
+      for (const { sheet, label, open } of SECTIONS) {
+        const ws = wb.Sheets[sheet];
+        if (!ws) continue;
+        // raw:false → Excel上の表示文字列で取得
+        const rows = XLSX.utils.sheet_to_json(ws, { defval: "", raw: false })
+          .filter((r) => Object.values(r).some((v) => String(v).trim() !== ""));
+        if (rows.length === 0) continue;  // 空シートは見出しごと非表示
+
+        const fmt = pickFormatter(sheet);
+        const items = (sheet === "Funding" ? rows : sortDesc(rows))
+          .map((r) => `<li>${fmt(r)}</li>`).join("");
+        // <details>/<summary> でクリック開閉（JS不要のHTML標準機能）
+        html += `<details class="pub-section"${open ? " open" : ""}>` +
+                `<summary>${esc(label)} <span class="count">(${rows.length})</span></summary>` +
+                `<ol class="pub-list" reversed>${items}</ol>` +
+                `</details>`;
+      }
+      container.innerHTML = html || '<p class="status">表示する業績がありません。</p>';
+    } catch (e) {
+      container.innerHTML = `<p class="error">業績ファイルの読み込みに失敗しました：${esc(e.message)}</p>`;
+      console.error(e);
+    }
+  }
+
+  // すべて開く / 閉じる
+  function setAll(open) {
+    document.querySelectorAll("details.pub-section").forEach((d) => { d.open = open; });
+  }
+  document.getElementById("expand-all").addEventListener("click", () => setAll(true));
+  document.getElementById("collapse-all").addEventListener("click", () => setAll(false));
+
+  loadAchievements();
+</script>
+</body>
+</html>
