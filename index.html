@@ -1,1 +1,246 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Reiya Katsuragi | 葛城 玲弥</title>
+  <!-- SheetJS: ブラウザ上で .xlsx / .xlsm を解析するライブラリ -->
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+  <style>
+    :root {
+      --fg: #1f2328;
+      --muted: #59636e;
+      --accent: #0b5cad;
+      --bg: #ffffff;
+      --bg-sub: #f6f8fa;
+      --border: #d1d9e0;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --fg: #e6edf3;
+        --muted: #9198a1;
+        --accent: #58a6ff;
+        --bg: #0d1117;
+        --bg-sub: #161b22;
+        --border: #30363d;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Helvetica Neue", Arial, "Hiragino Sans", "Noto Sans JP", Meiryo, sans-serif;
+      color: var(--fg);
+      background: var(--bg);
+      line-height: 1.7;
+    }
+    a { color: var(--accent); }
+
+    /* ---------- Header ---------- */
+    header {
+      background: var(--bg-sub);
+      border-bottom: 1px solid var(--border);
+    }
+    .header-inner {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 32px 16px;
+      display: flex;
+      align-items: center;
+      gap: 28px;
+    }
+    .profile-photo {
+      width: 140px;
+      height: 140px;
+      border-radius: 50%;
+      object-fit: cover;
+      border: 3px solid var(--border);
+      flex-shrink: 0;
+    }
+    .name-ja { font-size: 2rem; font-weight: 700; margin: 0; }
+    .name-en { font-size: 1.15rem; color: var(--muted); margin: 0 0 8px; }
+    .affiliation { margin: 0; color: var(--muted); }
+    @media (max-width: 600px) {
+      .header-inner { flex-direction: column; text-align: center; }
+    }
+
+    /* ---------- Main ---------- */
+    main { max-width: 960px; margin: 0 auto; padding: 24px 16px 64px; }
+    h2 {
+      font-size: 1.5rem;
+      border-bottom: 2px solid var(--accent);
+      padding-bottom: 4px;
+      margin-top: 40px;
+    }
+    h3 { font-size: 1.15rem; margin: 28px 0 8px; }
+    h3 .count { color: var(--muted); font-weight: 400; font-size: 0.95rem; }
+    ol.pub-list { padding-left: 2em; margin: 0; }
+    ol.pub-list li { margin-bottom: 10px; }
+    .me { font-weight: 700; text-decoration: underline; }
+    .pub-title { font-weight: 600; }
+    .pub-venue { font-style: italic; }
+    .status { color: var(--muted); }
+    .error { color: #cf222e; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="header-inner">
+    <!-- 顔写真: リポジトリ内の images/profile.jpg に配置 -->
+    <img class="profile-photo" src="images/profile.jpg" alt="Reiya Katsuragi">
+    <div>
+      <p class="name-ja">葛城 玲弥</p>
+      <p class="name-en">Reiya Katsuragi</p>
+      <p class="affiliation"><!-- 所属をここに記載 --></p>
+    </div>
+  </div>
+</header>
+
+<main>
+  <h2>Publications / Achievements</h2>
+  <div id="achievements"><p class="status">業績を読み込み中…</p></div>
+</main>
+
+<script>
+  // ================= 設定 =================
+  // 業績ファイルのパス（index.html からの相対パス）。.xlsx / .xlsm どちらでも可
+  const ACHIEVEMENT_FILE = "data/Ref_Rkatsuragi.xlsx";
+
+  // 著者リスト中で強調表示する自分の名前の表記ゆれ
+  const MY_NAMES = ["葛城玲弥", "葛城 玲弥", "Reiya Katsuragi", "R. Katsuragi"];
+
+  // 表示するシートと順序，見出し（シート名はExcel側と完全一致させる）
+  const SECTIONS = [
+    { sheet: "Journal",                  label: "Journal Papers（論文誌）" },
+    { sheet: "International Conference", label: "International Conferences（国際会議）" },
+    { sheet: "National Conference",      label: "Domestic Conferences（国内発表）" },
+    { sheet: "Preprint",                 label: "Preprints" },
+    { sheet: "Technical Report",         label: "Technical Reports / Articles（解説記事等）" },
+    { sheet: "Award",                    label: "Awards（受賞）" },
+    { sheet: "Funding",                  label: "Funding（研究費・プログラム）" },
+  ];
+  // ========================================
+
+  const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+  const val = (row, key) => String(row[key] ?? "").trim();
+
+  // 自分の名前を強調（エスケープ後に適用）
+  function highlightMe(authorsEscaped) {
+    let out = authorsEscaped;
+    for (const n of MY_NAMES) {
+      const e = esc(n);
+      out = out.split(e).join(`<span class="me">${e}</span>`);
+    }
+    return out;
+  }
+
+  function dateStr(row) {
+    const y = val(row, "Year"), m = val(row, "Month");
+    return y ? (m ? `${y}.${m.padStart(2, "0")}` : y) : "";
+  }
+
+  function link(url) {
+    return url ? ` [<a href="${esc(url)}" target="_blank" rel="noopener">Link</a>]` : "";
+  }
+
+  // シートごとの1件分の書式
+  const FORMATTERS = {
+    paper(row) {  // Journal / International / National Conference
+      const parts = [
+        highlightMe(esc(val(row, "Authors"))),
+        `<span class="pub-title">${esc(val(row, "Title"))}</span>`,
+        `<span class="pub-venue">${esc(val(row, "Conference Name"))}</span>`,
+      ];
+      if (val(row, "Session")) parts.push(esc(val(row, "Session")));
+      if (dateStr(row)) parts.push(dateStr(row));
+      return parts.join(", ") + "." + link(val(row, "URL"));
+    },
+    preprint(row) {
+      return [
+        highlightMe(esc(val(row, "Authors"))),
+        `<span class="pub-title">${esc(val(row, "Title"))}</span>`,
+        `<span class="pub-venue">${esc(val(row, "Repository"))}</span>`,
+        dateStr(row),
+      ].filter(Boolean).join(", ") + "." + link(val(row, "URL"));
+    },
+    report(row) {
+      const vol = val(row, "Vol."), no = val(row, "No."), pages = val(row, "Pages");
+      let venue = `<span class="pub-venue">${esc(val(row, "Journal"))}</span>`;
+      if (vol) venue += `, Vol.${esc(vol)}`;
+      if (no) venue += `, No.${esc(no)}`;
+      if (pages) venue += `, pp.${esc(pages)}`;
+      return [
+        highlightMe(esc(val(row, "Authors"))),
+        `<span class="pub-title">${esc(val(row, "Title"))}</span>`,
+        venue,
+        dateStr(row),
+      ].filter(Boolean).join(", ") + ".";
+    },
+    award(row) {
+      const work = val(row, "Title / Work");
+      const parts = [
+        `<span class="pub-title">${esc(val(row, "Award"))}</span>`,
+        `<span class="pub-venue">${esc(val(row, "Event"))}</span>`,
+      ];
+      if (work && work !== "—") parts.push(`「${esc(work)}」`);
+      if (val(row, "Recipients")) parts.push(highlightMe(esc(val(row, "Recipients"))));
+      if (dateStr(row)) parts.push(dateStr(row));
+      return parts.join(", ") + "." + link(val(row, "URL"));
+    },
+    funding(row) {
+      return `<span class="pub-title">${esc(val(row, "Program"))}</span>` +
+             (val(row, "Period") ? `（${esc(val(row, "Period"))}）` : "");
+    },
+  };
+
+  function pickFormatter(sheet) {
+    if (sheet === "Preprint") return FORMATTERS.preprint;
+    if (sheet === "Technical Report") return FORMATTERS.report;
+    if (sheet === "Award") return FORMATTERS.award;
+    if (sheet === "Funding") return FORMATTERS.funding;
+    return FORMATTERS.paper;
+  }
+
+  // 新しい順（Year→Month→No の降順）
+  function sortDesc(rows) {
+    const n = (x) => Number(x) || 0;
+    return rows.sort((a, b) =>
+      n(b.Year) - n(a.Year) || n(b.Month) - n(a.Month) || n(b.No) - n(a.No));
+  }
+
+  async function loadAchievements() {
+    const container = document.getElementById("achievements");
+    try {
+      const res = await fetch(ACHIEVEMENT_FILE, { cache: "no-cache" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}: ${ACHIEVEMENT_FILE}`);
+      const wb = XLSX.read(await res.arrayBuffer(), { type: "array" });
+
+      let html = "";
+      for (const { sheet, label } of SECTIONS) {
+        const ws = wb.Sheets[sheet];
+        if (!ws) continue;
+        // raw:false → Excel上の表示文字列で取得
+        const rows = XLSX.utils.sheet_to_json(ws, { defval: "", raw: false })
+          .filter((r) => Object.values(r).some((v) => String(v).trim() !== ""));
+        if (rows.length === 0) continue;  // 空シートは見出しごと非表示
+
+        const fmt = pickFormatter(sheet);
+        const items = (sheet === "Funding" ? rows : sortDesc(rows))
+          .map((r) => `<li>${fmt(r)}</li>`).join("");
+        html += `<h3>${esc(label)} <span class="count">(${rows.length})</span></h3>` +
+                `<ol class="pub-list" reversed>${items}</ol>`;
+      }
+      container.innerHTML = html || '<p class="status">表示する業績がありません。</p>';
+    } catch (e) {
+      container.innerHTML = `<p class="error">業績ファイルの読み込みに失敗しました：${esc(e.message)}</p>`;
+      console.error(e);
+    }
+  }
+
+  loadAchievements();
+</script>
+</body>
+</html>
 
